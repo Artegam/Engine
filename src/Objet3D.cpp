@@ -5,6 +5,18 @@
 
 #include <Objet3D.h>
 
+Objet3D::Objet3D() {
+	className = (char*)"Objet3D";
+	
+	posX = 0.0;
+	posY = 0.0;
+	posZ = 0.0;
+	
+	currentMaterialName = (char*)"";
+	
+	m = new MessagesManager();
+	m->setVerbose(false);
+}
 
 Objet3D::~Objet3D() {
 	glDeleteBuffers(1, &vbo_v);
@@ -20,6 +32,13 @@ void Objet3D::setNom(string pNom) {
 	nom = pNom;
 }
 
+void Objet3D::setPosition(double pX, double pY, double pZ) {
+	posX = pX;
+	posY = pY;
+	posZ = pZ;
+	position();
+}
+
 long Objet3D::getNbFaces(){
 	return faces.size();
 }
@@ -29,12 +48,27 @@ GLuint* Objet3D::getVertexArrayBuffer(){
 	return 0;
 }
 
+long Objet3D::getNbMaterials(){
+	return materials.size();
+}
+
+vector<Face> Objet3D::getFaces() {
+	return faces;
+}
+
+Material Objet3D::getMaterial(const char* materialName) {
+	map<string,Material>::iterator it;
+	it = materials.find(materialName);
+	return it->second;
+}
+
 void Objet3D::ajouterVertex(double pX, double pY, double pZ, double pW){
 	Vertex * v = new Vertex();
 
 	v->setX(pX);
 	v->setY(pY);
 	v->setZ(pZ);
+	
 	if (pW > 0) v->setW(pW);
 
 	vertices.insert(vertices.end(), *v);
@@ -50,7 +84,7 @@ void Objet3D::ajouterVertexNormal(double pX, double pY, double pZ, double pW){
 	verticesNormal.insert(verticesNormal.end(), *vn);
 }
 
-void Objet3D::ajouterFace(int nbParametres, char parametres[4][50], string nomMateriau){
+void Objet3D::ajouterFace(int nbParametres, char parametres[4][50], char* nomMateriau){
 	int numVertex[4];
 	int numVertexTexture[4];
 	int numVertexNormal[4];
@@ -100,11 +134,33 @@ void Objet3D::ajouterFace(int nbParametres, char parametres[4][50], string nomMa
 			f.setMaterialName(nomMateriau);
 		}
 		faces.insert(faces.end(), f);
+		//Ajoute le nombre de vertex pour un material et le mets a jour	
+		Material mat = materials.find(nomMateriau)->second;
+		mat.addVertices(f.getNbVertex());		
+		materials.erase(nomMateriau);
+		materials.insert(pair<string,Material>(mat.getNom(), mat));
+		
 	}
 }
 
 void Objet3D::initMaterial(map<string, Material> * mat) {	
-	materials = mat;	
+	//materials = mat;	
+}
+
+void Objet3D::ajouterMaterial(Material mat) {
+	materials.insert(pair<string,Material>(mat.getNom(), mat));
+	m->message(MM_INFO, className, "Material ajouté");
+	m->message(MM_INFO, className, mat.getNom().c_str());
+	//Ambient
+	sprintf(mBuffer, "A %f %f %f", mat.getAmbientR(), mat.getAmbientG(), mat.getAmbientB());
+	m->message(MM_INFO, className, mBuffer);
+	//Diffus
+	sprintf(mBuffer, "D %f %f %f", mat.getDiffuseR(), mat.getDiffuseG(), mat.getDiffuseB());
+	m->message(MM_INFO, className, mBuffer);
+	//speculaire
+	sprintf(mBuffer, "S %f %f %f", mat.getSpecularR(), mat.getSpecularG(), mat.getSpecularB());
+	m->message(MM_INFO, className, mBuffer);
+	//Controle de l'initialisation du vertice
 }
 
 void Objet3D::dessiner() {
@@ -116,7 +172,9 @@ void Objet3D::charger() {
 	
 	//ASCH 23/03/2015 - Transformation des collections en tableaux
 	//Vertices
-	printf("OBJET3D::CHARGER()\n");
+	//printf("OBJET3D::CHARGER()\n");
+	m->message(MM_INFO, className, "CHARGER()");
+	
 	//charger en fonction des faces
 	vector<Face>::iterator itf;
 	
@@ -134,49 +192,33 @@ void Objet3D::charger() {
 	
 	objectIndices = new int[objectIndicesSize - 1];
 	
-	for(itf = faces.begin(); itf != faces.end(); itf++) {
-		
+	for(itf = faces.begin(); itf != faces.end(); itf++) {		
 		//itf->chargerIndicesDansTabMemoire(objectIndices, pointeur);
 		//printf("valeur du pointeur : %d\n", pointeur);
 		itf->charger(vertices, verticesNormal, &verticesBuffer, &nbVertex);	
 		itf->chargerNormales(verticesNormal, &verticesNormalBuffer, &nbVertexNormal);
 	}
 	
-	//Calcul de la taille du tableau
-	int fverticesKa_size = verticesBuffer.size() * 4;	
 		
-	float* fverticesKa = new float[fverticesKa_size - 1]; // On commence à 0
-	float* fverticesKd = new float[fverticesKa_size - 1]; // On commence à 0
-	float* fverticesKs = new float[fverticesKa_size - 1]; // On commence à 0		
-	
-	//La meme taille de tableau est utilisee (fverticesKa_size)
-	vbo_Ka = 0;
-	
-	//Vertex - Ambiant
-	glGenBuffers (1, &vbo_Ka);
-	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ka);
-	glBufferData (GL_ARRAY_BUFFER, fverticesKa_size * sizeof (float), fverticesKa, GL_STATIC_DRAW);		
-	
-	//printf("OBJET3D::CHARGER(): vbo_Ka OK\n");
-
-	vbo_Ks = 0;
-	//printf("OBJET3D::CHARGER(): vbo_Kd OK\n");
-	
-	//Vertex - Specular
-	glGenBuffers (1, &vbo_Ks);
-	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ks);
-	glBufferData (GL_ARRAY_BUFFER, fverticesKa_size * sizeof (float), fverticesKs, GL_STATIC_DRAW);
-	//printf("OBJET3D::CHARGER(): vbo_Ks OK\n");
-	
 	//----------------------------------------------------------------------------------------
 	//Transformation de la collection vector en tableau de float
 	
 	//Calcul de la taille du tableau
-	fvertices_size = verticesBuffer.size() * 8;
+	fvertices_size = verticesBuffer.size() * 4;
 	//Réservation du tableau en mémoire
 	fvertices = new float[fvertices_size - 1]; // On commence à 0
+	
+	//Calcul de la taille du tableau
+	fverticesKd_size = verticesBuffer.size() * 3;	
+		
+	// float* fverticesKa = new float[fverticesKa_size - 1]; // On commence à 0
+	float* fverticesKd = new float[fverticesKd_size - 1]; // On commence à 0
+	// float* fverticesKs = new float[fverticesKa_size - 1]; // On commence à 0			
+	
+	
 	//Init
 	index = 0;	
+	long indexKd = 0;	
 	
 	vector<Vertex>::iterator it;
 	
@@ -185,17 +227,39 @@ void Objet3D::charger() {
 		fvertices[index + 1] = it->getY();
 		fvertices[index + 2] = it->getZ();
 		fvertices[index + 3] = it->getW();		
-		
-		//Couleurs du vertex - Diffuse
-		fverticesKd[index] = 0.0;
-		fverticesKd[index + 1] = 0.0;
-		fverticesKd[index + 2] = 0.0;
-		fverticesKd[index + 3] = 0.0;
-		
-		index += 4;
-	}	
-	//printf("OBJET3D::CHARGER(): transformation vertices OK\n");	
 
+		//Couleurs du vertex - Diffuse
+		// ne fonctionne pas comme ça - voir les materials		
+		fverticesKd[indexKd] = materials.find(it->getMaterialName())->second.getDiffuseR();
+		fverticesKd[indexKd + 1] = materials.find(it->getMaterialName())->second.getDiffuseG();
+		fverticesKd[indexKd + 2] = materials.find(it->getMaterialName())->second.getDiffuseB();
+
+		index += 4;
+		indexKd +=3;
+	}	
+	
+
+	//printf("OBJET3D::CHARGER(): transformation vertices OK\n");	
+	char s[150];
+	sprintf(s, "%s %f", "valeur du Kd.x", fverticesKd[0]);
+	m->message(MM_INFO, className, s);
+	
+	sprintf(s, "valeur du Kd.y %f", fverticesKd[1]);
+	m->message(MM_INFO, className, s);
+	
+	sprintf(s, "valeur du Kd.z %f", fverticesKd[2]);
+	m->message(MM_INFO, className, s);
+	
+	sprintf(s, "valeur du Kd.a %f", fverticesKd[3]);
+	m->message(MM_INFO, className, s);
+	
+	
+	/*
+	printf("OBJET3D::CHARGER(): valeur du Ka.x %f\n", fverticesKa[0]);
+	printf("OBJET3D::CHARGER(): valeur du Ka.y %f\n", fverticesKa[1]);
+	printf("OBJET3D::CHARGER(): valeur du Ka.z %f\n", fverticesKa[2]);
+	printf("OBJET3D::CHARGER(): valeur du Ka.a %f\n", fverticesKa[3]);
+	*/
 	//----------------------------------------------------------------------------------------
 	// Calcul pour les vecteurs normaux
 	
@@ -216,8 +280,7 @@ void Objet3D::charger() {
 		fverticesNormals[index + 2] = itn->getZ();
 		index += 3;
 	}	
-	//printf("OBJET3D::CHARGER(): Transformation vecteurs normaux OK\n");	
-	
+	//printf("OBJET3D::CHARGER(): Transformation vecteurs normaux OK\n");		
 	//----------------------------------------------------------------------------------------
 	
 	//Vertex
@@ -234,6 +297,16 @@ void Objet3D::charger() {
 	glGenBuffers (1, &vbo_vn);
 	glBindBuffer (GL_ARRAY_BUFFER, vbo_vn);
 	glBufferData (GL_ARRAY_BUFFER, fverticesN_size * sizeof (float), fverticesNormals, GL_STATIC_DRAW);	
+
+	/*
+	//Eclairage - Couleur ambiante
+	// On utilise la même taille que pour la couleur ambiante (fverticesKa_size)
+	vbo_Ka = 0;
+	
+	glGenBuffers (1, &vbo_Ka);
+	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ka);
+	glBufferData (GL_ARRAY_BUFFER, fverticesKa_size * sizeof (float), fverticesKa, GL_STATIC_DRAW);			
+	*/
 	
 	//Eclairage - Couleur diffuse
 	// On utilise la même taille que pour la couleur ambiante (fverticesKa_size)
@@ -241,16 +314,29 @@ void Objet3D::charger() {
 	
 	glGenBuffers (1, &vbo_Kd);
 	glBindBuffer (GL_ARRAY_BUFFER, vbo_Kd);
-	glBufferData (GL_ARRAY_BUFFER, fverticesKa_size * sizeof (float), fverticesKd, GL_STATIC_DRAW);			
+	glBufferData (GL_ARRAY_BUFFER, fverticesKd_size * sizeof (float), fverticesKd, GL_STATIC_DRAW);			
 	
+	/*
+	vbo_Ks = 0;
+	//printf("OBJET3D::CHARGER(): vbo_Kd OK\n");
+	
+	//Vertex - Specular
+	glGenBuffers (1, &vbo_Ks);
+	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ks);
+	glBufferData (GL_ARRAY_BUFFER, fverticesKa_size * sizeof (float), fverticesKs, GL_STATIC_DRAW);
+	//printf("OBJET3D::CHARGER(): vbo_Ks OK\n");	
+	*/
 	// Désallocations
 	delete[] fverticesNormals;
 	delete[] fvertices;
+//	delete[] fverticesKa;
+	delete[] fverticesKd;
 }
 
 
 void Objet3D::construireVAO(GLuint vao, int offset) {	
-	printf("OBJET3D::CONSTRUIREVAO()\n");
+
+	m->message(MM_INFO, className, "construireVAO(GLuint vao, int offset)");
 	glBindVertexArray (vao);
 	
 	charger();
@@ -263,12 +349,14 @@ void Objet3D::construireVAO(GLuint vao, int offset) {
 	glBindBuffer (GL_ARRAY_BUFFER, vbo_vn);
 	glVertexAttribPointer (1, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 	
+	
 	//ASCH - 10/05/2015 - Materiau
 	//Ambient
 	glEnableVertexAttribArray (2);
-	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ka);	
-	glVertexAttribPointer (2, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+	glBindBuffer (GL_ARRAY_BUFFER, vbo_Kd);	
+	glVertexAttribPointer (2, 3, GL_FLOAT, GL_FALSE, 0, NULL);
 
+	/*
 	//Diffuse
 	glEnableVertexAttribArray (3);
 	glBindBuffer (GL_ARRAY_BUFFER, vbo_Kd);	
@@ -278,9 +366,10 @@ void Objet3D::construireVAO(GLuint vao, int offset) {
 	glEnableVertexAttribArray (4);
 	glBindBuffer (GL_ARRAY_BUFFER, vbo_Ks);	
 	glVertexAttribPointer (4, 4, GL_FLOAT, GL_FALSE, 0, NULL);
+	*/
 	
 	glEnableVertexAttribArray (0);
-	glBindVertexArray(0); //termine le binding pour ce vertex array
+	glBindVertexArray(0); //termine le binding pour ce vertex array (unbind)
 	verticesNormalBuffer.clear();
 }
 
@@ -311,4 +400,21 @@ void Objet3D::afficher() {
 
 long Objet3D::getNbVertex(){
 	return verticesBuffer.size();
+}
+
+//ASCH - 12/12/2015 - positionne l'objet dans la scene (cf. setPosition)
+void Objet3D::position() {
+	// Calcul de la translation
+	vector<Vertex>::iterator it;
+		
+	for(it = vertices.begin(); it != vertices.end(); it++) {
+		it->setX(it->getX() + posX);
+		it->setY(it->getY() + posY);
+		it->setZ(it->getZ() + posZ);
+	}
+	
+}
+
+map<string, Material> Objet3D::getMaterialMap() {
+	return materials;
 }

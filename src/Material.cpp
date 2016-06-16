@@ -3,9 +3,11 @@
 
 Material::Material() {
 	//nom = "Inconnu";
+	nbVertices = 0;
 }
 
-Material::Material(string pNom){
+Material::Material(string pNom) {	
+	nbVertices = 0;
 	nom = pNom;
 }
 
@@ -111,4 +113,12 @@ void Material::setIlluminationModel(int pIllum) {
 
 void Material::setMapKd(string pFullFilename) {
 	mapKd = pFullFilename;
+}
+
+void Material::addVertices(long nbVerticesMore) {
+	nbVertices += nbVerticesMore;
+}
+
+long Material:: getNbVertices() {
+	return nbVertices;
 }

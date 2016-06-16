@@ -15,12 +15,13 @@ class Face {
 		vector<long> vertexNums;
 		vector<long> vertexTextNums;
 		vector<long> vertexNormalNums;
-		string materialName;		
+		char materialName[255];		
 
 	public:
-		void setMaterialName(string pMaterialName);
+		void setMaterialName(char* pMaterialName);
 
-		string getMaterialName();
+		char* getMaterialName();
+		long getNbVertex();
 
 		void ajouterNumVertex(long numVertex);
 		void ajouterNumVertexTexture(long numVertexTexture);

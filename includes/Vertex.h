@@ -11,6 +11,7 @@ class Vertex {
 		double y;
 		double z;
 		double w;
+		char materialName[255];
 
 	public:
 		Vertex();
@@ -19,11 +20,13 @@ class Vertex {
 		void setY(double pY);
 		void setZ(double pZ);
 		void setW(double pW);
+		void setMaterialName(char* pMaterialName);
 
 		double getX();
 		double getY();
 		double getZ();
 		double getW();
+		const char* getMaterialName();
 
 		void dessiner();
 };

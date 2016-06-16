@@ -4,6 +4,7 @@
 
 Vertex::Vertex() {
 	w = 1.0;
+	sprintf(materialName, "%s", "");
 }
 
 void Vertex::setX(double pX) {
@@ -22,6 +23,10 @@ void Vertex::setW(double pW) {
 	w = pW;
 }
 
+void Vertex::setMaterialName(char* pMaterialName) {
+	sprintf(materialName, "%s", pMaterialName);
+}
+
 double Vertex::getX() {
 	return x;
 }
@@ -36,6 +41,10 @@ double Vertex::getZ(){
 
 double Vertex::getW(){
 	return w;
+}
+
+const char* Vertex::getMaterialName() {
+	return materialName;
 }
 
 void Vertex::dessiner() {

@@ -19,7 +19,7 @@ TestObjParser::TestObjParser(string pNom) {
 void TestObjParser::executer() {
 	ObjParser * parser = new ObjParser();
 	vector<Objet3D> objets;
-	objets = parser->readFile(".\\obj\\test.obj", objets);
+	objets = parser->readFile(".\\ressources\\test.obj", objets);
 	
 	//ecrire les tests
 	titre("Test lecture du fichier");

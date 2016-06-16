@@ -21,7 +21,7 @@ void TestMtlParser::executer() {
 	MtlParser * parser = new MtlParser();
 	map<string, Material> materials;
 	
-	materials = parser->readMaterials(".\\mtl\\jaguard.mtl");
+	materials = parser->readMaterials(".\\ressources\\jaguard.mtl");
 	
 	titre("Test de lecture du fichier");
 	test("Chargement du fichier de test des materiaux...", materials.size() > 0);

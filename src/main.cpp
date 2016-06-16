@@ -10,6 +10,15 @@
 #include <ObjParser.h>
 #include <MtlParser.h>
 #include <Objet3D.h>
+#include <Rail.h>
+#include <Terrain.h>
+
+//TODO - A simplifier
+#include <ObjetDeScene.h>
+#include <Transformation.h>
+#include <ShaderManager.h>
+#include <KeyboardManager.h>
+#include <MessagesManager.h>
 
 //ASCH - 02/03/2015 - Test includes
 #include <UnitTestLoader.h>
@@ -21,66 +30,36 @@
 
 using namespace std;
 
-//Fonctions écrites en shader 4.0.0 pour le traitement des vao et vbo dans la carte graphique
-const char* vertex_shader =
-"#version 300\n"
-""
-"in vec4 vp;"
-"in vec3 vn;"
-"varying vec3 norm;"
-"varying vec4 v;"
-""
-"void main () {"
-"  gl_Position = gl_ModelViewProjectionMatrix * vp;"
-"  norm = gl_NormalMatrix * normalize(vn);" //gl_NormalMatrix * //TODO Correction
-"  v = gl_ModelViewMatrix * vp;"
-"}";
-
-const char* fragment_shader =
-"#version 400\n"
-"precision highp float;"
-"in vec4 vKa;"
-"in vec4 vKd;"
-"in vec4 vKs;"
-"out vec4 frag_colour;"
-"varying vec4 v;"
-"varying vec3 norm;"
-"void main () {"
-		//Diffuse
-"    vec3 L = normalize(gl_LightSource[0].position.xyz - v.xyz);"
-//"    vec4 Idiff = vec4(0.0, 0.512, 0.250, 0.0) * gl_LightSource[0].diffuse * max(dot(norm, L), 0.0);"
-//"    vec4 Idiff = vec4(vKd.x, vKd.y, vKd.z, vKd.w) * gl_LightSource[0].diffuse * max(dot(norm, L), 0.0);"
-//"    vec4 Idiff = vKd * gl_LightSource[0].diffuse * max(dot(norm, L), 0.0);"
-"    vec4 Idiff = gl_LightSource[0].diffuse * max(dot(norm, L), 0.0);"
-"    Idiff = clamp(Idiff, 0.0, 1.0);"
-"    frag_colour = Idiff;"
-"}";
-
-// FIN Fonctions shaders
-
-
 //Ligne de commande de compilation
 //g++ monPremierEssai.cpp -lGL -lglut -o monPremierEssai
 
 //Variables
 vector<Objet3D> objets;
+vector<ObjetDeScene*> objetsDeScene;
+
+//vector<Transformation> transformations;
 map<string, Material> materials;
-vector<Objet3D>::iterator it;
-map<string, Material>::iterator im;
-int angle;
+map<long, vector<Transformation> > transformations;
+
+map<long, vector<Transformation> >::iterator itTransf;
+
 const int delayms = 30;
 long nbVertex = 0;
-bool displayWireMode;
 int uid;
+int windowID;
+
+Rail * rail;
 
 //Shaders variables
+ShaderManager sm;
+KeyboardManager km;
+MessagesManager mm;
+char mBuffer[150];
+char className[5] = "MAIN";
 GLuint shader_programme;
-GLuint* vao;
-GLuint vbo = 0;
-GLuint vbo_c = 0;
-GLuint vbo_Ka = 0;
 GLuint vs; 
 GLuint fs;
+
 
 //Déclarations
 void initLight(void);
@@ -93,14 +72,22 @@ void timerFunction(int arg);
 GLuint loadingObject();
 void cleanShaders();
 void initShaders();
+void messageProgression(int pourcent);
+//void test();
+void desallocation();
+void ajouterDansListeDAffichage(ObjetDeScene * obj);
+void fabriquerListeAffichage(vector<ObjetDeScene*> lst);
+void dessiner(ObjetDeScene * obj);
+void charger(ObjetDeScene * obj);
+void chargerScene();
+
+void vBitmapOutput(int x, int y, const char *str, void *font);
 
 int main(int argc, char** argv) {
 
 	ObjParser * parser = new ObjParser();
 	MtlParser * mtl = new MtlParser();
 
-	angle = -1.0;
-	float valZoom = 0.0;
 
 	// Pour un écran Widescreen ratio d'aspect = 16:9
 	long width = 800;
@@ -116,97 +103,117 @@ int main(int argc, char** argv) {
 		testsUnitaires->executer();
 		return 0;
 	}
-
-	//25/09/2015 - Lecture du terrain
-	objets = parser->readFile(".\\obj\\terrain.obj", objets);
 	
-	//Lecture des fichiers obj et mtl
-	if (argv[1] != NULL && argv[2] != NULL) {
-		printf("MAIN: Lecture du fichier... \t %s\n", argv[1]);
-		objets = parser->readFile(argv[1], objets);
-		//printf("Lecture du fichier... \t %s\n", argv[2]);
-		//materials = mtl->readMaterials(argv[2]);
-	} else {
-		printf("MAIN: Veuillez passer en argument le nom du fichier obj et mtl (exemple: ./essai3D ./obj/jaguard.obj ./mtl/jaguard.mtl\n");
-		return 0;
+	chargerScene();
+	/*
+	for (int i = 0; i < objets.size(); i++) {
+		sprintf(mBuffer, "READ nbFaces obj %i : %d", i, objets[i].getNbFaces());
+		mm.message(MM_INFO, className, mBuffer);
 	}
-	
-	for (int i = 0; i < objets.size(); i++)
-		printf("MAIN: READ nbFaces obj %i : %d\n", i, objets[i].getNbFaces());
-	
+	*/
+		//printf("MAIN: READ nbFaces obj %i : %d\n", i, objets[i].getNbFaces());
+
+	//Initialisation des paramètres graphiques
 	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
+	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA | GLUT_ALPHA | GLUT_LUMINANCE);
 	
 	glutInitWindowPosition(100, 100);
 	glutInitWindowSize(width, height);
-	glutCreateWindow(argv[1]);
+	windowID = glutCreateWindow(argv[1]);
 
 	initShaders();
 	
-	//glPolygonMode( GL_FRONT_AND_BACK, GL_LINE);
-	//glPolygonMode( GL_FRONT_AND_BACK, GL_POINT);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	//Initialisation des matrices
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	//Réglages pour la profondeur de champ
 	gluPerspective (50.0*zoomFactor, (float)width/(float)height, zNear, zFar);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
 	
+	glMatrixMode(GL_COLOR);
 	glMatrixMode(GL_MODELVIEW);
 
 	initLight();
-	gluLookAt(0.0, 5.0, 20.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+	//gluLookAt(0.0, 5.0, 20.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+	gluLookAt(0.0, 5.0, 0.0, 0.0, 0.0, -50.0, 0.0, 1.0, 0.0);
 
+	mm.message(MM_INFO, className, "trace avant display");
 	glutDisplayFunc(render);
+	mm.message(MM_INFO, className, "trace apres display");
+	
 	//glutReshapeFunc(Reshape);
 	glutKeyboardFunc(keyboard);
 	glutMouseFunc(mouse);
  
-	glutTimerFunc(delayms, timerFunction, 0);
+	mm.message(MM_INFO, className, "trace apres glutfunc");
  
+	glutTimerFunc(delayms, timerFunction, 0); 
+	mm.message(MM_INFO, className, "trace avant Loop");
 	glutMainLoop();
+	mm.message(MM_INFO, className, "trace apres Loop");
 	
 	//ASCH  06/03/2014 - Libération de la mémoire
 	parser->~ObjParser();
 	mtl->~MtlParser();
+	
+	mm.message(MM_INFO, className, "terminee");
 }
 
 
 void initLight(void) 
-{
+{	
+	GLfloat light_position[] = {10.0, 10.0, -10.0, 1.0};
+	GLfloat light_ambient[] = {1.0, 1.0, 1.0, 1.0};
+	GLfloat light_diffuse[] = {1.0, 1.0, 1.0, 1.0}; // Puissance de la lumière
+	GLfloat light_spec[] = {1.0, 1.0, 1.0, 1.0}; 
+	GLfloat lmodel_ambient[] = { 0.5, 0.5, 0.5, 1.0 };
 	
 	//Shaders
 	glShadeModel(GL_SMOOTH);
 
-	//Lights
-	GLfloat light_position[] = { 0.0, 10.0, 4.0, 1.0 };
+	//Lights positions
 	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
 
-	GLfloat light_diffuse[] = { 0.25, 0.75, 0.25, 1.0 };
+	//Lights colors
+	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-	//glLightfv(GL_LIGHT0, GL_SPECULAR, light_diffuse);
-	//glLightfv(GL_LIGHT0, GL_SHININESS, light_diffuse);
+	glLightfv(GL_LIGHT0, GL_SPECULAR, light_spec);	
+	
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, lmodel_ambient);
+	
 	
 	//Activation de l'éclairage
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);	
-
-	//Surfaces
+	glEnable(GL_LIGHT0);
+	//Activation des materiaux
+	glEnable(GL_COLOR_MATERIAL);
+	glEnable(GL_ALPHA_TEST);
 	
+	glDisable(GL_CULL_FACE);
+	
+	//Pour la composante Alpha
+	glEnable (GL_BLEND);
+	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	//fin composante alpha
+	
+
+	glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+	glColorMaterial(GL_FRONT, GL_AMBIENT);
+	glColorMaterial(GL_FRONT, GL_DIFFUSE);
+	glColorMaterial(GL_FRONT, GL_SPECULAR);
+	glColorMaterial(GL_FRONT, GL_EMISSION);
+	glColorMaterial(GL_FRONT, GL_SHININESS);
+	
+	//Surfaces	
 	//vertex Materials pour refleter la lumière (matériau par defaut)
+	GLfloat mat_diffuse[] = { 1.0, 1.0, 1.0, 1.0 };
 	GLfloat mat_specular[] = { 1.0, 1.0, 1.0, 1.0 };
 	GLfloat mat_shininess[] = { 50.0 };
 
+	glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
 	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
 	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);		
-	
 }
 
 void idle(void) {
@@ -214,19 +221,46 @@ void idle(void) {
 }
 
 void render(void) {
-	//glEnable(GL_CULL_FACE);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glRotatef(angle,0.0,1.0,0.0);
-
-  glUseProgram (shader_programme);
-  // draw points 0-3 from the currently bound VAO with current in-use shader
-	for(int i=0;i < objets.size();i++) {
-		glBindVertexArray(vao[i]);
-		glDrawArrays (GL_TRIANGLES, 0, objets[i].getNbVertex());
-	}
 	
+	//glEnable(GL_CULL_FACE);
+	glClearColor(0.0, 0.0, 0.0, 1.0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	
+  glUseProgram (shader_programme);		
+		
+	for_each(objetsDeScene.begin(), objetsDeScene.end(), dessiner);
+
 	glutSwapBuffers();
 }
+
+/*
+DOCUMENTATION
+
+  float colorBronzeDiff[4] = { 0.8, 0.6, 0.0, 1.0 };
+  float colorBronzeSpec[4] = { 1.0, 1.0, 0.4, 1.0 };
+  float colorBlue[4]       = { 0.0, 0.2, 1.0, 1.0 };
+  float colorNone[4]       = { 0.0, 0.0, 0.0, 0.0 };
+	
+
+  glRotatef(g_fTeapotAngle, 0, 0, 1);
+  glMaterialfv(GL_FRONT, GL_DIFFUSE, colorBlue);
+  glMaterialfv(GL_FRONT, GL_SPECULAR, colorNone);
+  glColor4fv(colorBlue);
+  glBindTexture(GL_TEXTURE_2D, TEXTURE_ID_CUBE);
+  DrawCubeWithTextureCoords(1.0);
+
+  // Child object (teapot) ... relative transform, and render
+  glPushMatrix();
+  glTranslatef(2, 0, 0);
+  glRotatef(g_fTeapotAngle2, 1, 1, 0);
+  glMaterialfv(GL_FRONT, GL_DIFFUSE, colorBronzeDiff);
+  glMaterialfv(GL_FRONT, GL_SPECULAR, colorBronzeSpec);
+  glMaterialf(GL_FRONT, GL_SHININESS, 50.0);
+  glColor4fv(colorBronzeDiff);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glutSolidTeapot(0.3);
+  glPopMatrix();	
+*/
+
 
 void Reshape(int w, int h) {
 	glViewport( 0, 0, (GLint)w, (GLint)h );
@@ -238,28 +272,7 @@ void Reshape(int w, int h) {
 }
 
 void keyboard(unsigned char c, int x, int y) {
-	// ASCH - 29/09/2014 - La touche 27 est la touche echap
-	if (c == 27) {
-		//Desallocation
-		printf("MAIN: Sortie du programme \n");
-		cleanShaders();
-		exit(0);
-	}		
-
-	if (c == 'l') {
-		glPolygonMode( GL_FRONT_AND_BACK, GL_LINE);
-		displayWireMode = !displayWireMode;
-	}
-	
-	if (c == 'p') {
-		glPolygonMode( GL_FRONT_AND_BACK, GL_POINT);
-		displayWireMode = !displayWireMode;
-	}
-	
-	if (c == 'f') {		
-		glPolygonMode( GL_FRONT_AND_BACK, GL_FILL);
-		displayWireMode = !displayWireMode;
-	} 		
+	km.executer(c, x, y);
 }
 
 void mouse(int button, int state, int x, int y){
@@ -273,73 +286,17 @@ void timerFunction(int arg)
 	glutTimerFunc(delayms, timerFunction, 0);
 }
 
-void cleanShaders() {
-	glBindVertexArray(0);
-	glDisableVertexAttribArray(0);
-	glDisableVertexAttribArray(1);
+void initShaders() {	
+	//ASCH - 25/05/2016 - Initialisation des shaders	
+	sm.init();
+	shader_programme = sm.getShader_programme();
+	vs = sm.getVertexShader(); 
+	fs = sm.getFragShader();	
 	
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	//ASCH 25/05/2016 - Chargement des objets de scene
+	for_each(objetsDeScene.begin(), objetsDeScene.end(), charger);
 	
-	glUseProgram(0);
-	
-	glDeleteBuffers(1, &vbo);
-	glDeleteBuffers(1, &vbo_c);
-	glDeleteBuffers(1, &vbo_Ka);
-	
-	glDeleteVertexArrays(objets.size(), vao);
-	
-	glDetachShader(shader_programme, vs);
-	glDetachShader(shader_programme, fs);
-	
-	glDeleteShader(vs);
-	glDeleteShader(fs);
-	
-	glDeleteProgram(shader_programme);
-}
-
-void initShaders() {
-	printf("MAIN.initShaders()\n");
-	// get version info
-	const GLubyte* vendor = glGetString (GL_VENDOR); // Fournisseur
-  const GLubyte* renderer = glGetString (GL_RENDERER); // get renderer string
-  const GLubyte* version = glGetString (GL_VERSION); // version as a string
-	printf ("MAIN.initShaders: Fournisseur: %s\n", vendor);
-  printf ("MAIN.initShaders: Renderer: %s\n", renderer);
-  printf ("MAIN.initShaders: OpenGL version supported %s\n", version);
-	// FIN get version info		
-
-	//Creation des shaders
-	vs = glCreateShader (GL_VERTEX_SHADER);
-	glShaderSource (vs, 1, &vertex_shader, NULL);
-	glCompileShader (vs);
-	
-	GLint IsCompiled_VS;
-	
-	glGetShaderiv(vs, GL_COMPILE_STATUS, &IsCompiled_VS);
-    if(IsCompiled_VS == FALSE)
-			printf("MAIN.initShaders: Erreur de compilation de shader\n");
-		else	
-			printf("MAIN.initShaders: vs shader OK\n");
-		
-	fs = glCreateShader (GL_FRAGMENT_SHADER);
-	glShaderSource (fs, 1, &fragment_shader, NULL);
-	glCompileShader (fs);	
-	
-	glGetShaderiv(fs, GL_COMPILE_STATUS, &IsCompiled_VS);
-		if(IsCompiled_VS == FALSE)
-			printf("MAIN.initShaders: Erreur de compilation de shader\n");
-		else
-			printf("MAIN.initShaders: fs shader OK\n");
-	
-	//FIN Creation des shaders
-	
-	//Shader programme
-	shader_programme = glCreateProgram ();
-	glAttachShader (shader_programme, vs);
-	glAttachShader (shader_programme, fs);
-	//glBindAttribLocation(shader_programme, 0, "in_Position");	
-
+	/* A CONTROLER DANS LA CLASSE ObjetDeScene ou shaderManager
 	//ASCH 24/09/2015 - Modification pour prendre en compte le multiobjet
 	printf("---- taille : %d\n", objets.size());
 	vao = new GLuint[objets.size()];
@@ -351,18 +308,126 @@ void initShaders() {
 	for(int i = 0; i < objets.size(); i++) {
 		objets[i].construireVAO(vao[i], i);
 		nbVertex += objets[i].getNbVertex();
-		
-		// insert location binding code here
-		glBindAttribLocation (shader_programme, 0, "vp");
-		glBindAttribLocation (shader_programme, 1, "vn");
-		glBindAttribLocation (shader_programme, 2, "vKa");
-		glBindAttribLocation (shader_programme, 3, "vKd");
-		glBindAttribLocation (shader_programme, 4, "vKs");		
-	}
-	printf("MAIN: Nb d'objets : %d\n", objets.size());
-	//printf("MAIN: Nombre total de vertex : %d\n", nbVertex);
+	}	
+	*/
+}
 
-	glLinkProgram(shader_programme);
-	glUseProgram(shader_programme);
-	//FIN Shader programme
+void messageProgression(int pourcent) {
+	sprintf(mBuffer, "Chargement... %d %%", pourcent);
+	mm.message(MM_INFO, className, mBuffer);
+}
+/*
+void test(){
+	glPushMatrix();
+		glBindVertexArray(vao[3]);
+		glTranslatef(0.0, 0.0, 2.0);
+		glDrawArrays (GL_TRIANGLES, 0, objets[3].getNbVertex());
+	glPopMatrix();	
+}
+*/
+void desallocation(){
+	rail->~Rail();
+}
+
+void ajouterDansListeDAffichage(ObjetDeScene * obj) {
+	vector<Objet3D> objetsAAjouter = obj->getObjets();
+	for(int i=0;i < objetsAAjouter.size();i++) {
+		objets.insert(objets.end(), objetsAAjouter[i]);
+		vector<Transformation> t = obj->getTransformations();		
+		transformations.insert(transformations.end(), std::pair<long,vector<Transformation> >(objets.size()-1, t)); //Ajoute les transformations
+	}
+}
+
+void fabriquerListeAffichage(vector<ObjetDeScene*> lst){
+	objets.clear();
+	for(int i = 0; i < lst.size(); i++) {
+		ajouterDansListeDAffichage(lst[i]);
+	}
+}
+
+void dessiner(ObjetDeScene * obj) {
+	obj->draw();
+}
+
+void charger(ObjetDeScene * obj) {
+	obj->load();
+}
+
+
+//-------------------RECHERCHES A FAIRE-----------------------------------------------
+void vBitmapOutput(int x, int y, const char *str, void *font)
+{
+	int len,i; // len donne la longueur de la chaîne de caractères
+
+	glDisable(GL_TEXTURE_2D);
+	//glDisable(GL_DEPTH_TEST);
+	
+	glRasterPos2f(x,y); // Positionne le premier caractère de la chaîne
+	len = (int) strlen(str); // Calcule la longueur de la chaîne
+	for (i = 0; i < len; i++) 
+		glutBitmapCharacter(font,str[i]); // Affiche chaque caractère de la chaîne
+	
+}
+
+void chargerScene(){
+
+	/*
+	ObjetDeScene * obj = new ObjetDeScene();
+	obj->chargerFichier(".\\ressources\\terrain.obj");
+	objetsDeScene.insert(objetsDeScene.end(), *obj);
+	obj->printNbTranformations();
+	obj->addTranslation(1.0, 0.0, 0.0);
+	obj->printNbTranformations();
+	printf("---\n");
+	objetsDeScene[0].printNbTranformations();
+	printf("***\n");
+	
+	//remplace l'objet modifié dans la liste
+	objetsDeScene.erase(objetsDeScene.end());
+	objetsDeScene.insert(objetsDeScene.end(), *obj);
+	objetsDeScene[0].printNbTranformations();
+	printf("###\n");
+	*/
+
+	
+	ObjetDeScene * obj = new Terrain(&sm);
+	objetsDeScene.insert(objetsDeScene.end(), obj);
+
+/*	
+	rail = new Rail(&sm);
+	rail->addRotation(45.0, 0.0, 1.0, 0.0);
+	objetsDeScene.insert(objetsDeScene.end(), rail);
+
+	
+	//Ajoute un second rail
+	rail = new Rail(&sm);
+	rail->addTranslation(5.0, 0.0, 0.0);
+	objetsDeScene.insert(objetsDeScene.end(), rail);
+*/	
+
+	obj = new ObjetDeScene(&sm);
+	obj->chargerFichier(".\\ressources\\cube.obj");
+	obj->addTranslation(10.0, 10.0, -10.0);
+	objetsDeScene.insert(objetsDeScene.end(), obj);
+
+	obj = new ObjetDeScene(&sm);
+	obj->chargerFichier(".\\ressources\\rail_double_virage45.obj");
+	// obj->chargerFichier(".\\ressources\\Blaster_triangles.obj");
+	//obj->chargerFichier(".\\ressources\\rail_triangles.obj");
+	objetsDeScene.insert(objetsDeScene.end(), obj);
+	
+	//ASCH 25/05/2016 - OBSOLETE
+	//Fabrique la liste d'affichage pour les objets 3D
+	//fabriquerListeAffichage(objetsDeScene);
+	
+	messageProgression(100);
+	
+	//printf("nb objets : %d\n", objets.size());
+	mm.message(MM_INFO, className, "Positions calculees...");
+	sprintf(mBuffer, "nb d'objets de scene : %d", objetsDeScene.size());
+	mm.message(MM_INFO, className, mBuffer);
+
+	//10/12/15 - Fichier pourri ? Options de génération du fichier dans blender ?
+	//objets = parser->readFile(".\\ressources\\dewoitine2.obj", objets);	
+
 }

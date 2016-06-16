@@ -3,6 +3,12 @@
 //ASCH - 17/10/2014 - Paramètres
 
 //ASCH - 17/10/2014 - Méthodes
+
+ObjParser::ObjParser() {
+	m = new MessagesManager();
+	className = (char*)"ObjParser";
+}
+
 vector<Objet3D> ObjParser::readFile (const char * filename, vector<Objet3D> pObjets) {
 
 	FILE* fichier;
@@ -13,7 +19,6 @@ vector<Objet3D> ObjParser::readFile (const char * filename, vector<Objet3D> pObj
 	cptObjects = 0;
 	vObj = new Objet3D(); //Un objet par fichier
 	vObj->setNom(filename);
-	printf("OBJPARSER::READFILE() nombre de points : %d\n", vObj->getNbVertex());
 	
 	fichier = fopen(filename, "r");
 	
@@ -33,8 +38,15 @@ vector<Objet3D> ObjParser::readFile (const char * filename, vector<Objet3D> pObj
 		if(strcmp((const char*)ligne, (char*)"f") == 0)
 			readFace(fichier);
 		
+		if(strcmp((const char*)ligne, (char*)"mtllib") == 0) {
+			readMaterialLibrary(fichier);
+			char mtlfilename[50];
+			sprintf(mtlfilename, ".\\ressources\\%s", nomMtlLib);
+			readMtlFile(mtlfilename);
+		}
+		
 		if(strcmp((const char*)ligne, (char*)"usemtl") == 0)
-			readMaterial(fichier);
+			readMaterialUsed(fichier);
 	}
 	
 	//ASCH 02/08/15 - Insère le dernier objet lu en mémoire.
@@ -99,15 +111,120 @@ void ObjParser::readFace(FILE* fichier) {
 		printf("Erreur de lecture : %s", ligne);
 
 	if (nbParametres >= 3)
-		vObj->ajouterFace(nbParametres, parametres, "");
+		vObj->ajouterFace(nbParametres, parametres, nomMaterialCourrant);
 
 	cptFaces++;
 }
 
 void ObjParser::readMaterial(FILE* fichier) {
-	printf("READMATERIAL()\n");
+	//ASCH 28/05/2016 - Lire la définition d'un material
+	m->message(MM_INFO, className, "Lecture de definition de material non definie");
+}
+
+void ObjParser::readMaterialUsed(FILE* fichier) {
+	fscanf(fichier, "%s", &nomMaterialCourrant);
+	sprintf(mBuffer, "nom material utilise : %s\n", nomMaterialCourrant);
+	m->message(MM_INFO, className, mBuffer);
+}
+
+void ObjParser::readMaterialLibrary(FILE* fichier) {	
+	fscanf(fichier, "%s", &nomMtlLib);
+	sprintf(mBuffer, "Nom de mtllib : %s", nomMtlLib);
+	m->message(MM_INFO, className, mBuffer);
 }
 
 void ObjParser::insertObject() {
 	objets.insert(objets.end(), *vObj);
+}
+
+void ObjParser::readMtlFile(const char* filename) {
+	sprintf(mBuffer, "Lecture du fichier %s...", filename);
+	m->message(MM_INFO, className, mBuffer);
+	
+	FILE* fichier;
+	char ligne[255];
+	
+	/* Exemple de declaration dans un fichier mtl
+	# Blender MTL File: 'None'
+	# Material Count: 2
+
+	newmtl Bois
+	Ns 96.078431
+	Ka 0.000000 0.000000 0.000000
+	Kd 0.640000 0.640000 0.640000
+	Ks 0.500000 0.500000 0.500000
+	Ni 1.000000
+	d 1.000000
+	illum 2
+	*/	
+	
+	fichier = fopen(filename, "r");
+	
+	while(!feof(fichier)) {
+		ligne[0] = '\0';
+		fscanf(fichier, "%s", ligne);
+
+		if(strcmp((const char*)ligne, (char*)"newmtl") == 0)
+			readNewMaterial(fichier);
+
+		if(strcmp((const char*)ligne, (char*)"Ns") == 0)
+			readSpecularExponent(fichier);
+	
+		if(strcmp((const char*)ligne, (char*)"Ka") == 0)
+			readAmbient(fichier);
+			
+		if(strcmp((const char*)ligne, (char*)"Kd") == 0)
+			readDiffuse(fichier);
+			
+		if(strcmp((const char*)ligne, (char*)"Ks") == 0)
+			readSpecular(fichier);
+	
+/*
+		if(strcmp((const char*)ligne, (char*)"Ni") == 0)
+			
+		if(strcmp((const char*)ligne, (char*)"d") == 0)
+			
+		if(strcmp((const char*)ligne, (char*)"illum") == 0)
+*/
+
+	}
+}
+
+void ObjParser::readNewMaterial(FILE* fichier) {	
+	char nomMaterial[50];
+	//if(vObj->getNbMaterials() > 0) {
+	fscanf(fichier, "%s", &nomMaterial);
+	mat = 0;
+	mat = new Material(nomMaterial);
+}
+
+void ObjParser::readSpecularExponent(FILE* fichier) {
+	double val;
+	fscanf(fichier, "%f", &val);
+	mat->setSpecularExponent(val);
+}
+
+void ObjParser::readAmbient(FILE* fichier) {
+	float r;
+	float g;
+	float b;
+	fscanf(fichier, "%f %f %f", &r, &g, &b);
+	mat->setAmbient(r, g, b);
+}
+
+void ObjParser::readDiffuse(FILE* fichier) {
+	float r;
+	float g;
+	float b;
+	fscanf(fichier, "%f %f %f", &r, &g, &b);
+	mat->setDiffuse(r, g, b);
+}
+
+void ObjParser::readSpecular(FILE* fichier) {
+	float r;
+	float g;
+	float b;
+	fscanf(fichier, "%f %f %f", &r, &g, &b);
+	mat->setSpecular(r, g, b);
+	vObj->ajouterMaterial(*mat); //A faire sur l'instruction illum
 }

@@ -14,6 +14,8 @@ class Material {
 		float Ns, Ni, d;
 		int illum;
 		string mapKd;
+		
+		long nbVertices;
 
 	public:
 		Material();
@@ -35,6 +37,7 @@ class Material {
 		float getIndiceOfRefraction();
 		int getIlluminationModel();
 		string getMapKd();
+		long getNbVertices();
 		
 		void setNom(string pNom);
 		void setAmbient(float pR, float pG, float pB);
@@ -45,6 +48,8 @@ class Material {
 		void setIndiceOfRefraction(float pNi);
 		void setIlluminationModel(int pIllum);
 		void setMapKd(string pFullFilename);
+		
+		void addVertices(long nbVerticesMore);
 };
 
 #endif

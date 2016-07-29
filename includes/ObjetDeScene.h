@@ -10,6 +10,7 @@
 #include <MessagesManager.h>
 #include <ShaderManager.h>
 #include <Material.h>
+#include <Animation.h>
 
 using namespace std;
 
@@ -21,7 +22,9 @@ class ObjetDeScene {
 		vector<Objet3D> getObjets();
 		vector<Transformation> getTransformations();
 		void addRotation(double pAngle, double pX, double pY, double pZ);
+		void addAnimeRotation(double pAngle, double pX, double pY, double pZ, int pDuree);
 		void addTranslation(double pX, double pY, double pZ);
+		void addAnimeTranslation(double pX, double pY, double pZ, int pDuree);
 		void clearTransformations();
 		void chargerFichier(string fichierSrc);
 		void printNbTranformations();
@@ -31,6 +34,7 @@ class ObjetDeScene {
 	protected:	
 		vector<Objet3D> objets;
 		vector<Transformation> transformations;
+		vector<Animation> animations;
 		//map<long, vector<Transformation> > transformations;
 		
 	private:
@@ -42,16 +46,9 @@ class ObjetDeScene {
 		long nbVertex;
 		//map<long, vector<Transformation> >::iterator itTransf;
 		vector<Transformation>::iterator itTransf;
+		vector<Animation>::iterator itAnime;
 		GLint locColor;
-		double rAngle;
-		double rX;
-		double rY;
-		double rZ;
-		double tX;
-		double tY;
-		double tZ;
 		
-		void calculateTransformations();
 		void calculateDiffuseColor();
 };
 

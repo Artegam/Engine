@@ -1,12 +1,15 @@
 #ifndef TRANSFORMATION
 #define TRANSFORMATION
 
+#include <ShaderManager.h>
+
 class Transformation {
 	
 	public:
 		Transformation(char pType, double pV1, double pV2, double pV3, double pV4);
 		char getType();
 		double* getValues();
+		void Executer();
 		
 	private:	
 		char type; // R ou T

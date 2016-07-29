@@ -408,7 +408,13 @@ void chargerScene(){
 	obj = new ObjetDeScene(&sm);
 	obj->chargerFichier(".\\ressources\\cube.obj");
 	obj->addTranslation(10.0, 10.0, -10.0);
+	obj->addAnimeRotation(1.0, 0.0, 1.0, 0.0, -1); // rotation pendant 250 tics suivant l'axe Y de 1 degrees
 	objetsDeScene.insert(objetsDeScene.end(), obj);
+	
+	obj = new ObjetDeScene(&sm);
+	obj->chargerFichier(".\\ressources\\coin_de_mur_de_chateau.obj");
+	objetsDeScene.insert(objetsDeScene.end(), obj);	
+	
 
 	obj = new ObjetDeScene(&sm);
 	obj->chargerFichier(".\\ressources\\rail_double_virage45.obj");
